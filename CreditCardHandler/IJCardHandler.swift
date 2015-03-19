@@ -9,13 +9,13 @@
 import Foundation
 import Security
 
-public class IJCreditCardHandler: NSObject, RBA_SDK_Event_support, LogTrace_support
+@objc public class IJCreditCardHandler: NSObject, RBA_SDK_Event_support, LogTrace_support
 {
     let _log = Logger.defaultInstance()
     var _gi:GeneralInfoVO = GeneralInfoVO()   //from libPaymentService.a
     let _report:PaymentService = PaymentService()
-    let _emv:TransactionEMVInfoVO = TransactionEMVInfoVO()
-    let _endOfCardProcessInput = NSCondition()
+    var _emv:TransactionEMVInfoVO = TransactionEMVInfoVO()
+    //let _endOfCardProcessInput = NSCondition()
     var _amount = ""
     var _chipCard = false
     var _validCard = false
@@ -267,8 +267,8 @@ public class IJCreditCardHandler: NSObject, RBA_SDK_Event_support, LogTrace_supp
     
     public func StopTransaction()
     {
-        _transactionDone = false
-        _endOfCardProcessInput.unlock()
+        _transactionDone = true
+        //_endOfCardProcessInput.unlock()
         MessageOffline()
     }
 
@@ -380,7 +380,7 @@ public class IJCreditCardHandler: NSObject, RBA_SDK_Event_support, LogTrace_supp
             default:
                 loglvl = LTL_NONE
         }
-        LoggingSetup()
+        //LoggingSetup() objective C does not like it.
         LogTrace.SetDelegate(self)
         LogTrace.SetTraceOutputFormatOption(LOFO_NO_DATE)
         LogTrace.SetTraceOutputFormatOption(LOFO_NO_INSTANCE_ID)
@@ -407,23 +407,34 @@ public class IJCreditCardHandler: NSObject, RBA_SDK_Event_support, LogTrace_supp
         return StartMagnaticTransaction(true)
     }
     
-    public func StartSwipedTransaction(type:Int, amt:String, currency:String, itemId:CInt, seatNum:String?, fareClass:String?,ffStatus:String?) ->Bool
+    public func StartSwipedTransaction(type:Int, amt:String, currency:String, itemId:CInt, seatNum:String, fareClass:String,ffStatus:String) ->Bool
     {
         return StartMagnaticTransaction(false, type:TransactionTypes(rawValue: type)!, amt: amt, currency: currency, itemId: itemId, seatNum:seatNum, fareClass:fareClass, ffStatus:ffStatus)
     }
     
-    public func StartNFCTransaction(type:Int, amt:String, currency:String, itemId:CInt, seatNum:String?, fareClass:String?,ffStatus:String?) ->Bool
+    public func StartNFCTransaction(type:Int, amt:String, currency:String, itemId:CInt, seatNum:String, fareClass:String,ffStatus:String) ->Bool
     {
         return StartMagnaticTransaction(true, type:TransactionTypes(rawValue: type)!, amt: amt, currency: currency, itemId: itemId, seatNum:seatNum, fareClass:fareClass, ffStatus:ffStatus)
     }
     
-    public func StartEMVTransaction(type:Int, amt:String, currency:String, itemId:CInt, seatNum:String?, fareClass:String?,ffStatus:String?) ->Bool
+    public func StartEMVTransaction(type:Int, amt:String, currency:String) -> Bool
+    {
+        return StartChipPinTransaction(type, amt:amt, currency:currency)
+    }
+    
+    public func StartEMVTransaction(type:Int, amt:String, currency:String, itemId:CInt,  seatNum:String, fareClass:String,ffStatus:String) -> Bool
+
+    {
+        return StartChipPinTransaction(type, amt:amt, currency:currency, itemId:itemId,  seatNum:seatNum, fareClass:fareClass,ffStatus:ffStatus)
+    }
+    
+    func StartChipPinTransaction(type:Int, amt:String, currency:String, itemId:CInt? = 0,  seatNum:String? = "", fareClass:String? = "",ffStatus:String? = "") -> Bool
     {
         if (!EnableSmartCard())
         {
             return false
         }
-
+        DisableKeyedIn()
         MessageOnline()
         _emv.EMVCardIssuerAuthenticationData = ""
         _emv.EMVCardIssuerScriptTemplate1 = ""
@@ -431,11 +442,12 @@ public class IJCreditCardHandler: NSObject, RBA_SDK_Event_support, LogTrace_supp
         _emv.EMVShortFileIdentifier = "00"
         _emv.EMVServiceCode = "201"
         _type = TransactionTypes(rawValue: type)!
-        _itemId = itemId
+        _itemId = itemId!
         _currency = currency
         _seatNum = seatNum!
         _fareClass = fareClass!
         _ffStatus = ffStatus!
+        _transactionDone = false
         RBA_SDK.SetParam(Int(P14_REQ_TXN_TYPE.value), data:"01")
         RBA_SDK.ProcessMessage(Int(M14_SET_TXN_TYPE.value))
         sleep(5)
@@ -446,8 +458,6 @@ public class IJCreditCardHandler: NSObject, RBA_SDK_Event_support, LogTrace_supp
         if (sa.count == 2)
         {
             strAmt = sa[0] + sa[1]
-            
-            
         }
         else
         {
@@ -456,12 +466,12 @@ public class IJCreditCardHandler: NSObject, RBA_SDK_Event_support, LogTrace_supp
         _amount = strAmt
         RBA_SDK.SetParam(Int(P13_REQ_AMOUNT.value), data:strAmt)
         RBA_SDK.ProcessMessage(Int(M13_AMOUNT.value))
-        _endOfCardProcessInput.lock()
-        let date = NSDate(timeIntervalSinceNow: 60000)
+        let date = NSDate(timeIntervalSinceNow: 5) //seconds
         while(!_transactionDone)
         {
-            _endOfCardProcessInput.waitUntilDate(date)
+            NSRunLoop.currentRunLoop().runUntilDate(date)
         }
+        StopTransaction()
         return true
     }
     
@@ -694,8 +704,7 @@ public class IJCreditCardHandler: NSObject, RBA_SDK_Event_support, LogTrace_supp
             _emv.NonEMVCardEntryCode = sData
             break
         case "8A":
-            let hexData = StringToHexString(sData)
-            _emv.EMVCardAuthorizationResponseCode = sData
+            _emv.EMVCardAuthorizationResponseCode = GetARC(sData)
             break
         case "95":
             _emv.EMVCardTerminalVerificationResults = sData
@@ -752,7 +761,7 @@ public class IJCreditCardHandler: NSObject, RBA_SDK_Event_support, LogTrace_supp
             _emv.EMVTerminalCountryCode = sData
             break
         case "9F1E":
-            let hexData = StringToHexString(sData)
+            //let hexData = StringToHexString(sData)
             _emv.EMVInterfaceDeviceSerialNumber = sData
             break
         case "9F26":
@@ -937,9 +946,22 @@ public class IJCreditCardHandler: NSObject, RBA_SDK_Event_support, LogTrace_supp
         return true
     }
     
+    func DisableKeyedIn()
+    {
+        if(IsConfigSettingEnabled("7", index: "29"))
+        {
+            MessageOffline()            
+            RBA_SDK.SetParam(Int(P60_REQ_GROUP_NUM.value), data: "7")
+            RBA_SDK.SetParam(Int(P60_REQ_INDEX_NUM.value), data: "29")
+            RBA_SDK.SetParam(Int(P60_REQ_DATA_CONFIG_PARAM.value), data: "0")
+            RBA_SDK.ProcessMessage(Int(M60_CONFIGURATION_WRITE.value))
+            
+            RBA_SDK.GetParam(Int(P60_RES_STATUS.value))
+        }
+    }
+    
     func StartMagnaticTransaction(isNFC:Bool, type:TransactionTypes? = TransactionTypes.Purchase, amt:String? = "", currency:String? = "", itemId:CInt? = 0, seatNum:String? = "", fareClass:String? = "",ffStatus:String? = "") ->Bool
     {
-        var result = false
         if( RBA_SDK.GetConnectionStatus() != Int(CONNECTED.value) )
         {
             if(!connect())
@@ -951,6 +973,7 @@ public class IJCreditCardHandler: NSObject, RBA_SDK_Event_support, LogTrace_supp
         _validCard = true
         _cardSource = ""
         EnableCardSource()
+        DisableKeyedIn()
         if(isNFC)
         {
             RBA_SDK.SetParam(Int(P23_REQ_PROMPT_INDEX.value), data: "Please tap card")
@@ -968,12 +991,16 @@ public class IJCreditCardHandler: NSObject, RBA_SDK_Event_support, LogTrace_supp
         _fareClass = fareClass!
         _ffStatus = ffStatus!
         _amount = amt!
-        //_endOfCardProcessInput.lock()
-        //_endOfCardProcessInput.wait()
-        //let date = NSDate(timeIntervalSinceNow: 60000)
-        //_endOfCardProcessInput.waitUntilDate(date)
+        _transactionDone = false
 
-        return result
+        let date = NSDate(timeIntervalSinceNow: 5) //seconds
+        while(!_transactionDone)
+        {
+            NSRunLoop.currentRunLoop().runUntilDate(date)
+        }
+        StopTransaction()
+
+        return true
     }
     
     func SetupLoggingPath(fileName:String) ->String
@@ -995,6 +1022,30 @@ public class IJCreditCardHandler: NSObject, RBA_SDK_Event_support, LogTrace_supp
         let filePath = SetupLoggingPath("LogFile.txt")
         _log.setup(logLevel: .Debug, showLogLevel: true, showFileNames: true, showLineNumbers: true, writeToFile: filePath)
 
+    }
+    
+    func GetARC(data:String) -> String
+    {
+        var code = ""
+        switch (data)
+        {
+            case "Y1":
+                code = "5931"
+                break
+            case "Y3":
+                code = "5933"
+                break
+            case "Z1":
+                    code = "5A31"
+                break
+            case "Z3":
+                    code = "5A33"
+                break
+            default:
+                code = data
+                break
+        }
+        return code
     }
     
 }

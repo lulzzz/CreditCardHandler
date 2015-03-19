@@ -9,7 +9,7 @@
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
-	<string>eGate.$(PRODUCT_NAME:rfc1034identifier)</string>
+	<string>com.eGate.$(PRODUCT_NAME:rfc1034identifier)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -24,11 +24,11 @@
 	<string></string>
 	<key>LSApplicationCategoryType</key>
 	<string></string>
+	<key>NSPrincipalClass</key>
+	<string></string>
 	<key>UISupportedExternalAccessoryProtocols</key>
 	<array>
 		<string>com.ingenico.easypayemv.spm-transaction</string>
 	</array>
-	<key>NSPrincipalClass</key>
-	<string></string>
 </dict>
 </plist>
