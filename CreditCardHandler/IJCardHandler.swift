@@ -11,9 +11,9 @@ import Security
 
 @objc public class IJCreditCardHandler: NSObject, RBA_SDK_Event_support, LogTrace_support
 {
-    let _log = Logger.defaultInstance()
+    var _log = Logger.defaultInstance()
     var _gi:GeneralInfoVO = GeneralInfoVO()   //from libPaymentService.a
-    let _report:PaymentService = PaymentService()
+    var _report:PaymentService = PaymentService()
     var _emv:TransactionEMVInfoVO = TransactionEMVInfoVO()
     //let _endOfCardProcessInput = NSCondition()
     var _amount = ""
@@ -187,6 +187,7 @@ import Security
 					_track2 = RBA_SDK.GetParam(Int(P23_RES_TRACK2.value))
 					_track3 = RBA_SDK.GetParam(Int(P23_RES_TRACK3.value))
                     //_log.error(TrackData3)
+                    //NSLog(_track3)
                     if(_save)
                     {
                         AddSwipedToPaymentReport()
@@ -253,8 +254,8 @@ import Security
             if(fileSystemSizeInMB > 10) //delete over 10 MB
             {
                 NSFileManager.defaultManager().removeItemAtPath(filePath, error: nil)
+                NSFileManager.defaultManager().createFileAtPath(filePath, contents: nil, attributes: nil)
             }
-            NSFileManager.defaultManager().createFileAtPath(filePath, contents: nil, attributes: nil)
         }
         let outputStream:NSOutputStream = NSOutputStream(toFileAtPath: filePath, append: true)!
 
@@ -392,7 +393,9 @@ import Security
             return false
         }
         RBA_SDK.SetDelegate(self)
-        
+        //for Objective C. Otherwise, file not created.
+        _report = PaymentService()
+        _log = Logger.defaultInstance()
         return true
     }
     
@@ -451,6 +454,7 @@ import Security
         _ffStatus = ffStatus
         _type = TransactionTypes(rawValue: type)!
         _itemId = itemId
+        _emv = TransactionEMVInfoVO()
         _emv.EMVCardIssuerAuthenticationData = ""
         _emv.EMVCardIssuerScriptTemplate1 = ""
         _emv.EMVCardIssuerScriptTemplate2 = ""
@@ -885,7 +889,8 @@ import Security
         tranemv.eMVIssuerScriptResultsField = _emv.EMVIssuerScriptResults
         tranemv.eMVServiceCode = _emv.EMVServiceCode
         _report.InsertTransaction(tranemv, _gi)
-    }
+        NSLog("EMV Transaction Added to file!")
+   }
  
     func AddSwipedToPaymentReport()
     {
@@ -901,7 +906,10 @@ import Security
 
         tr.paymentType = _type == TransactionTypes.Purchase ? "Charge" : "Refund"
         tr.uniqueTransactionId = uuid
+        //let output = String(format:"%@ %@ %@ %@ %@", _gi.deviceId, _gi.FlightNum, _gi.OriginatingAirport, _gi.DestinationAirport, "\(_gi.DepartureTime)")
+        //NSLog(output)
         _report.InsertTransaction(tr, _gi)
+        NSLog("Magnetic Transaction Added to file!")
     }
     
     func StringToHexString(value:String) ->String
