@@ -24,6 +24,22 @@ public enum LogLevel:Int
     case Debug = 4
 }
 
+//public struct TransactionType
+//{
+//    let Purchase: Int = 1
+//    let Refund:Int = 2
+//}
+//
+//public struct LogLevel
+//{
+//    let None:Int = -1
+//    let Error:Int = 0
+//    let Warning:Int = 1
+//    let Info:Int = 2
+//    let Trace:Int = 3
+//    let Debug:Int = 4
+//}
+
 public struct EMVDeclineMessage {
     static let JapaneseYen = "JPY"
     static let SouthKoreanWon = "KRW"

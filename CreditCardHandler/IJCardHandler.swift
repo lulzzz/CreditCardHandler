@@ -186,7 +186,7 @@ import Security
 					_track1 = RBA_SDK.GetParam(Int(P23_RES_TRACK1.value))
 					_track2 = RBA_SDK.GetParam(Int(P23_RES_TRACK2.value))
 					_track3 = RBA_SDK.GetParam(Int(P23_RES_TRACK3.value))
-                    _log.error(TrackData3)
+                    //_log.error(TrackData3)
                     if(_save)
                     {
                         AddSwipedToPaymentReport()
@@ -241,7 +241,6 @@ import Security
  
     public func LogTraceOut(line: String)
     {
-        var error: NSError?
         let filePath = SetupLoggingPath("RBA.log")
         if (!NSFileManager.defaultManager().fileExistsAtPath(filePath))
         {
@@ -253,15 +252,15 @@ import Security
             var fileSystemSizeInMB : Double = Double(attributes.fileSize())/1000000
             if(fileSystemSizeInMB > 10) //delete over 10 MB
             {
-                NSFileManager.defaultManager().removeItemAtPath(filePath, error: &error)
+                NSFileManager.defaultManager().removeItemAtPath(filePath, error: nil)
             }
             NSFileManager.defaultManager().createFileAtPath(filePath, contents: nil, attributes: nil)
         }
-        let outputStream = NSOutputStream(toFileAtPath: filePath, append: true)
+        let outputStream:NSOutputStream = NSOutputStream(toFileAtPath: filePath, append: true)!
 
-        outputStream?.open()
-        outputStream?.write(line, maxLength: line.utf16Count)
-        outputStream?.close()
+        outputStream.open()
+        outputStream.write(line, maxLength: line.utf16Count)
+        outputStream.close()
         NSLog(line)
     }
     
@@ -389,7 +388,7 @@ import Security
         if( result != Int(RESULT_SUCCESS) )
         {
             let msg = String(format: "Initializel Fail. Result code: %d",result)
-            _log.error(msg)
+            //_log.error(msg)
             return false
         }
         RBA_SDK.SetDelegate(self)
@@ -399,12 +398,26 @@ import Security
     
     public func StartSwipedTransaction() ->Bool
     {
-        return StartMagnaticTransaction(false)
+        let type = TransactionTypes.Purchase
+        let amt = "0"
+        let currency = ""
+        let itemId:CInt = 0
+        let seatNum = ""
+        let fareClass = ""
+        let ffStatus = ""
+        return StartMagnaticTransaction(false, type:type, amt: amt, currency: currency, itemId: itemId, seatNum:seatNum, fareClass:fareClass, ffStatus:ffStatus)
     }
 
     public func StartNFCTransaction() ->Bool
     {
-        return StartMagnaticTransaction(true)
+        let type = TransactionTypes.Purchase
+        let amt = "0"
+        let currency = ""
+        let itemId:CInt = 0
+        let seatNum = ""
+        let fareClass = ""
+        let ffStatus = ""
+        return StartMagnaticTransaction(true, type:type, amt: amt, currency: currency, itemId: itemId, seatNum:seatNum, fareClass:fareClass, ffStatus:ffStatus)
     }
     
     public func StartSwipedTransaction(type:Int, amt:String, currency:String, itemId:CInt, seatNum:String, fareClass:String,ffStatus:String) ->Bool
@@ -418,17 +431,35 @@ import Security
     }
     
     public func StartEMVTransaction(type:Int, amt:String, currency:String) -> Bool
+        
     {
-        return StartChipPinTransaction(type, amt:amt, currency:currency)
+        SetVariables(type, currency:currency, itemId:0,  seatNum:"", fareClass:"",ffStatus:"")
+        return StartChipPinTransaction(amt)
     }
     
     public func StartEMVTransaction(type:Int, amt:String, currency:String, itemId:CInt,  seatNum:String, fareClass:String,ffStatus:String) -> Bool
 
     {
-        return StartChipPinTransaction(type, amt:amt, currency:currency, itemId:itemId,  seatNum:seatNum, fareClass:fareClass,ffStatus:ffStatus)
+        SetVariables(type, currency:currency, itemId:itemId,  seatNum:seatNum, fareClass:fareClass,ffStatus:ffStatus)
+        return StartChipPinTransaction(amt)
     }
     
-    func StartChipPinTransaction(type:Int, amt:String, currency:String, itemId:CInt? = 0,  seatNum:String? = "", fareClass:String? = "",ffStatus:String? = "") -> Bool
+    func SetVariables(type:Int, currency:String, itemId:CInt, seatNum:String, fareClass:String,ffStatus:String)
+    {
+        _seatNum = seatNum
+        _fareClass = fareClass
+        _ffStatus = ffStatus
+        _type = TransactionTypes(rawValue: type)!
+        _itemId = itemId
+        _emv.EMVCardIssuerAuthenticationData = ""
+        _emv.EMVCardIssuerScriptTemplate1 = ""
+        _emv.EMVCardIssuerScriptTemplate2 = ""
+        _emv.EMVShortFileIdentifier = "00"
+        _emv.EMVServiceCode = "201"
+        _currency = currency
+    }
+    
+    func StartChipPinTransaction(amt:String) -> Bool
     {
         if (!EnableSmartCard())
         {
@@ -436,17 +467,7 @@ import Security
         }
         DisableKeyedIn()
         MessageOnline()
-        _emv.EMVCardIssuerAuthenticationData = ""
-        _emv.EMVCardIssuerScriptTemplate1 = ""
-        _emv.EMVCardIssuerScriptTemplate2 = ""
-        _emv.EMVShortFileIdentifier = "00"
-        _emv.EMVServiceCode = "201"
-        _type = TransactionTypes(rawValue: type)!
-        _itemId = itemId!
-        _currency = currency
-        _seatNum = seatNum!
-        _fareClass = fareClass!
-        _ffStatus = ffStatus!
+        
         _transactionDone = false
         RBA_SDK.SetParam(Int(P14_REQ_TXN_TYPE.value), data:"01")
         RBA_SDK.ProcessMessage(Int(M14_SET_TXN_TYPE.value))
@@ -496,7 +517,7 @@ import Security
         else
         {
             let msg = String(format: "Connect Fail. Result code: %d",result)
-            _log.error(msg)
+            //_log.error(msg)
             return false
         }
     }
@@ -960,7 +981,7 @@ import Security
         }
     }
     
-    func StartMagnaticTransaction(isNFC:Bool, type:TransactionTypes? = TransactionTypes.Purchase, amt:String? = "", currency:String? = "", itemId:CInt? = 0, seatNum:String? = "", fareClass:String? = "",ffStatus:String? = "") ->Bool
+    func StartMagnaticTransaction(isNFC:Bool, type:TransactionTypes, amt:String, currency:String, itemId:CInt, seatNum:String, fareClass:String,ffStatus:String) ->Bool
     {
         if( RBA_SDK.GetConnectionStatus() != Int(CONNECTED.value) )
         {
@@ -984,13 +1005,13 @@ import Security
         }
 
         RBA_SDK.ProcessMessage(Int(M23_CARD_READ.value))
-        _type = type!
-        _itemId = itemId!
-        _currency = currency!
-        _seatNum = seatNum!
-        _fareClass = fareClass!
-        _ffStatus = ffStatus!
-        _amount = amt!
+        _type = type
+        _itemId = itemId
+        _currency = currency
+        _seatNum = seatNum
+        _fareClass = fareClass
+        _ffStatus = ffStatus
+        _amount = amt
         _transactionDone = false
 
         let date = NSDate(timeIntervalSinceNow: 5) //seconds
@@ -1005,13 +1026,12 @@ import Security
     
     func SetupLoggingPath(fileName:String) ->String
     {
-        var error: NSError?
         var paths = NSSearchPathForDirectoriesInDomains(.DocumentDirectory, .UserDomainMask, true)[0] as String
         var logPath = paths.stringByAppendingPathComponent("/Log")
         
         if (!NSFileManager.defaultManager().fileExistsAtPath(logPath))
         {
-            NSFileManager.defaultManager().createDirectoryAtPath(logPath, withIntermediateDirectories: false, attributes: nil, error: &error)
+            NSFileManager.defaultManager().createDirectoryAtPath(logPath, withIntermediateDirectories: false, attributes: nil, error: nil)
         }
         
         return logPath.stringByAppendingPathComponent(fileName)
